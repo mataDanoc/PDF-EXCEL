@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Project: ignore uploaded/output files (keep structure)
+input/*.pdf
+output/*.xlsx
+output/_test/
+
+# Test artifacts
+test_*.pdf
+test_*.xlsx
+
+# Logs
+*.log
+logs/
+
+# Claude settings
+.claude/

@@ -134,6 +134,8 @@ class GridBuilder:
         }
 
         # ── Step 4: Map cells to grid ────────────────────────────────
+        # Process each row: compute start_col for ALL cells first, then
+        # derive end_col so that no two cells on the same row overlap.
         grid_cells: List[GridCell] = []
 
         for text_row in all_rows:
@@ -144,9 +146,26 @@ class GridBuilder:
                 and id(text_row) == table_first_rows.get(id(owning_table))
             )
 
+            # First pass: compute start_col for every cell in this row
+            row_positioned: List[Tuple[Cell, int]] = []
             for cell in text_row.cells:
                 sc = self._snap_start(cell.x0, boundaries)
+                row_positioned.append((cell, sc))
+
+            # Sort by start_col (left to right)
+            row_positioned.sort(key=lambda x: x[1])
+
+            # Second pass: compute end_col, capped before the next cell
+            for i, (cell, sc) in enumerate(row_positioned):
+                # Natural end column from the text's right edge
                 ec = self._snap_end(cell.x1, boundaries, sc)
+
+                # CAP: do not extend into the next cell's start column
+                if i + 1 < len(row_positioned):
+                    next_sc = row_positioned[i + 1][1]
+                    ec = min(ec, next_sc - 1)
+
+                ec = max(ec, sc)  # at least 1 column wide
 
                 bg_color = self._find_bg(cell, layout.filled_rects)
                 text_color = None

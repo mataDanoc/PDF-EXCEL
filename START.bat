@@ -20,6 +20,12 @@ if %ERRORLEVEL% NEQ 0 (
 :: Shko te direktoria e projektit
 cd /d "%~dp0"
 
+:: Shto Tesseract OCR ne PATH nese ekziston
+if exist "C:\Program Files\Tesseract-OCR\tesseract.exe" (
+    set "PATH=%PATH%;C:\Program Files\Tesseract-OCR"
+    echo  [OK] Tesseract OCR u gjet
+)
+
 :: Kontrollo nese porta 5050 eshte e lire
 netstat -an | find ":5050 " | find "LISTENING" > nul 2>&1
 if %ERRORLEVEL% EQU 0 (

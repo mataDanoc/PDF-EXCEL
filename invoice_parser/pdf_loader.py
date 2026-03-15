@@ -5,15 +5,18 @@ Extracts every text element and visual element from the PDF:
   - Words with bounding boxes, font info, bold detection
   - Vector lines (table borders)
   - Filled rectangles with their RGB colours (backgrounds)
+  - Hybrid OCR: text embedded as images is recovered via Tesseract
 
-Two libraries work in tandem:
+Three libraries work in tandem:
   - pdfplumber  -> word-level extraction with font metadata
-  - PyMuPDF     -> vector drawings, lines, fills, rectangles
+  - PyMuPDF     -> vector drawings, lines, fills, rectangles, page rendering
+  - Tesseract   -> OCR for text-as-image regions (table headers, labels)
 """
 
 from __future__ import annotations
 
 import logging
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -24,6 +27,29 @@ import fitz  # PyMuPDF
 from .config import Config, DEFAULT_CONFIG
 
 logger = logging.getLogger(__name__)
+
+# ── Optional OCR imports ─────────────────────────────────────────────────────
+try:
+    import pytesseract
+    from PIL import Image
+    import numpy as np
+    _OCR_OK = True
+
+    # Auto-detect tesseract on Windows
+    _tesseract_path = shutil.which("tesseract")
+    if not _tesseract_path:
+        for candidate in [
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        ]:
+            if Path(candidate).exists():
+                _tesseract_path = candidate
+                break
+    if _tesseract_path:
+        pytesseract.pytesseract.tesseract_cmd = _tesseract_path
+        logger.debug("Tesseract found: %s", _tesseract_path)
+except ImportError:
+    _OCR_OK = False
 
 
 # ── Data classes ──────────────────────────────────────────────────────────────
@@ -153,6 +179,19 @@ class PDFLoader:
                         words = self._extract_words(plumber_page, page_num + 1)
                         lines, filled_rects = self._extract_visuals(fitz_page, page_num + 1)
 
+                        # Hybrid OCR: recover text from embedded images
+                        has_images = bool(fitz_page.get_images())
+                        if has_images and _OCR_OK:
+                            ocr_words = self._ocr_image_text(
+                                fitz_page, page_num + 1, words,
+                            )
+                            if ocr_words:
+                                words.extend(ocr_words)
+                                logger.info(
+                                    "Page %d: OCR recovered %d words from images",
+                                    page_num + 1, len(ocr_words),
+                                )
+
                         total_chars = sum(len(w.text) for w in words)
                         is_scanned = total_chars < self.config.ocr_text_threshold
 
@@ -271,3 +310,78 @@ class PDFLoader:
                             lines.append(DetectedLine(p1.x, p1.y, p2.x, p2.y, page_num))
 
         return lines, fills
+
+    # ── Hybrid OCR: text embedded as images ────────────────────────────────
+
+    def _ocr_image_text(
+        self,
+        fitz_page,
+        page_num: int,
+        existing_words: List[Word],
+    ) -> List[Word]:
+        """Render the page at 300 DPI, OCR it, return words not overlapping existing text."""
+        dpi = self.config.ocr_dpi
+        scale = dpi / 72.0
+        pt_scale = 72.0 / dpi  # pixel -> PDF points
+
+        try:
+            mat = fitz.Matrix(scale, scale)
+            pix = fitz_page.get_pixmap(matrix=mat, alpha=False)
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        except Exception as exc:
+            logger.warning("Page render failed for OCR on page %d: %s", page_num, exc)
+            return []
+
+        try:
+            data = pytesseract.image_to_data(
+                img, config="--psm 6", output_type=pytesseract.Output.DICT,
+            )
+        except Exception as exc:
+            logger.warning("Tesseract failed on page %d: %s", page_num, exc)
+            return []
+
+        ocr_words: List[Word] = []
+        n = len(data["text"])
+
+        for i in range(n):
+            text = (data["text"][i] or "").strip()
+            if not text:
+                continue
+            conf = int(data["conf"][i]) if str(data["conf"][i]) != "-1" else 0
+            if conf < 40:
+                continue
+
+            # Convert pixel coords to PDF points
+            x0 = data["left"][i] * pt_scale
+            y0 = data["top"][i] * pt_scale
+            x1 = (data["left"][i] + data["width"][i]) * pt_scale
+            y1 = (data["top"][i] + data["height"][i]) * pt_scale
+
+            # Skip if overlapping with any existing pdfplumber word
+            if self._overlaps_existing(x0, y0, x1, y1, existing_words):
+                continue
+
+            ocr_words.append(Word(
+                text=text,
+                x0=x0, y0=y0, x1=x1, y1=y1,
+                page_num=page_num,
+                font_size=8.0,
+                font_name=None,
+                bold=False,
+            ))
+
+        return ocr_words
+
+    @staticmethod
+    def _overlaps_existing(
+        x0: float, y0: float, x1: float, y1: float,
+        existing: List[Word], margin: float = 3.0,
+    ) -> bool:
+        """Check if an OCR word's center overlaps any existing word's bbox."""
+        cx = (x0 + x1) / 2.0
+        cy = (y0 + y1) / 2.0
+        for w in existing:
+            if (w.x0 - margin <= cx <= w.x1 + margin and
+                    w.y0 - margin <= cy <= w.y1 + margin):
+                return True
+        return False

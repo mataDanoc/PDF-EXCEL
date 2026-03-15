@@ -50,7 +50,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Dict
 
 from .config import Config, DEFAULT_CONFIG
-from .pdf_loader import Word, DetectedLine, PageData
+from .pdf_loader import Word, DetectedLine, FilledRect, PageData
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +156,8 @@ class PageLayout:
     col_boundaries: List[ColumnBoundary] = field(default_factory=list)
     table_regions: List[TableRegion] = field(default_factory=list)
     regions: List[DocumentRegion] = field(default_factory=list)
+    filled_rects: List[FilledRect] = field(default_factory=list)
+    lines: List[DetectedLine] = field(default_factory=list)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -200,6 +202,8 @@ class LayoutDetector:
             col_boundaries=col_boundaries,
             table_regions=table_regions,
             regions=regions,
+            filled_rects=page.filled_rects,
+            lines=page.lines,
         )
 
     # ------------------------------------------------------------------ #

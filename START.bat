@@ -1,11 +1,11 @@
 @echo off
 chcp 65001 > nul
 title PDF to Excel - Server
+cd /d "%~dp0"
 
 echo.
 echo  ============================================================
-echo    PDF to Excel Converter - LOCAL SERVER
-echo    Port: 5050  ^|  http://localhost:5050
+echo    PDF to Excel Converter
 echo  ============================================================
 echo.
 
@@ -17,58 +17,42 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-:: Shko te direktoria e projektit
-cd /d "%~dp0"
-
 :: Shto Tesseract OCR ne PATH nese ekziston
 if exist "C:\Program Files\Tesseract-OCR\tesseract.exe" (
     set "PATH=%PATH%;C:\Program Files\Tesseract-OCR"
-    echo  [OK] Tesseract OCR u gjet
 )
 
-:: Kontrollo nese porta 5050 eshte e lire
-netstat -an | find ":5050 " | find "LISTENING" > nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-    echo  [KUJDES] Porta 5050 eshte e zene. Duke u mbylle procesi ekzistues...
-    for /f "tokens=5" %%a in ('netstat -aon ^| find ":5050 " ^| find "LISTENING"') do (
-        taskkill /F /PID %%a > nul 2>&1
-    )
-    timeout /t 2 /nobreak > nul
-)
+:: Mbyll procese ekzistuese ne portat
+for /f "tokens=5" %%a in ('netstat -aon ^| find ":5050 " ^| find "LISTENING" 2^>nul') do taskkill /F /PID %%a > nul 2>&1
 
-:: Kontrollo nese porta 5051 eshte e lire (backup port)
-netstat -an | find ":5051 " | find "LISTENING" > nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-    for /f "tokens=5" %%a in ('netstat -aon ^| find ":5051 " ^| find "LISTENING"') do (
-        taskkill /F /PID %%a > nul 2>&1
-    )
-    timeout /t 1 /nobreak > nul
-)
-
-:: Krijo dosjet nese nuk ekzistojne
+:: Krijo dosjet
 if not exist "input"  mkdir input
 if not exist "output" mkdir output
 
-:: Shfaq instruksionet
-echo  [OK] Duke nisur serverin...
+echo  [1/2] Duke nisur serverin lokal ne port 5050...
+start "PDF-Excel Server" /min cmd /k "cd /d "%~dp0" && python -m uvicorn webapp.app:app --host 127.0.0.1 --port 5050 --log-level info"
+
+echo  [2/2] Duke pritur serverin te nisë...
+timeout /t 4 /nobreak > nul
+
+echo  [3/3] Duke hapur tunelin publik...
 echo.
-echo  INSTRUKSIONE:
-echo    1. Hap browser-in te: http://localhost:5050
-echo    2. Terhiq PDF-te ne zone te ngarkimit
-echo    3. Kliko "Konverto tani"
-echo    4. Shkarko Excel-in e gjeneruar
+echo  ============================================================
+echo   LOKAL  (ti):   http://localhost:5050
 echo.
-echo  Shtype CTRL+C per te ndalur serverin
-echo  Ose ekzekuto STOP.bat ne dritare tjeter
+echo   PUBLIK (miqte): shiko dritaren e re te hapur
+echo   Kerko rreshtin:  https://xxxxx.trycloudflare.com
+echo   Kopjo ate link dhe dergoja miqve!
 echo  ============================================================
 echo.
 
-:: Hap browser-in pas 2 sekondash (ne background)
-start /b cmd /c "timeout /t 2 /nobreak > nul && start http://localhost:5050"
+:: Hap browser-in lokal
+start http://localhost:5050
 
-:: Starto FastAPI me uvicorn - PORT 5050
-python -m uvicorn webapp.app:app --host 127.0.0.1 --port 5050 --reload --log-level info
+:: Starto tunelin Cloudflare ne dritare te re
+start "Cloudflare Tunnel - LINK PUBLIK" cmd /k "echo. && echo  Lidhu... && echo. && cloudflared.exe tunnel --url http://localhost:5050 2>&1"
 
+echo  Te dy sherbimet po punojne.
+echo  Kur te mbarosh, ekzekuto STOP.bat
 echo.
-echo  [INFO] Serveri u ndal.
 pause

@@ -25,6 +25,10 @@ for /f "tokens=5" %%a in ('netstat -aon ^| find ":5051 " ^| find "LISTENING" 2^>
     set FOUND=1
 )
 
+:: Ndalo cloudflared
+echo  Duke ndalur tunelin Cloudflare...
+taskkill /F /IM cloudflared.exe > nul 2>&1
+
 :: Ndalo edhe proceset uvicorn/python ne emer
 echo  Duke kerkuar proceset uvicorn...
 for /f "tokens=2" %%a in ('tasklist /fi "imagename eq python.exe" /fo table /nh 2^>nul') do (

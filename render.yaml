@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: pdf-excel-converter
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+    disk:
+      name: output-files
+      mountPath: /app/output
+      sizeGB: 1

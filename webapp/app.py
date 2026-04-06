@@ -244,10 +244,12 @@ def _sync_convert(pdf_path: str, xlsx_path: str, job_id: str) -> None:
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
+    port = int(os.environ.get("PORT", 5050))
+    host = "0.0.0.0" if os.environ.get("RENDER") else "127.0.0.1"
     uvicorn.run(
         "app:app",
-        host="127.0.0.1",
-        port=5050,
+        host=host,
+        port=port,
         reload=False,
         log_level="info",
     )
